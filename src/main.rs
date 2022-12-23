@@ -1,42 +1,22 @@
 mod message;
 mod window;
 
-use clap::*;
 use batrachia::*;
+use clap::*;
+use futures_util::{stream::*, SinkExt, StreamExt};
 use message::Payload;
-use futures_util::{
-    stream::*,
-    StreamExt,
-    SinkExt,
-};
 
 use tokio_tungstenite::{
-    tungstenite::protocol::Message,
-    WebSocketStream,
-    MaybeTlsStream,
-    connect_async,
+    connect_async, tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream,
 };
 
-use std::{
-    io::SeekFrom,
-    sync::Arc,
-};
+use std::{io::SeekFrom, sync::Arc};
 
-use tokio::io::{
-    AsyncReadExt,
-    AsyncSeekExt,
-};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-use tokio::{
-    net::TcpStream,
-    sync::Mutex,
-    fs,
-};
+use tokio::{fs, net::TcpStream, sync::Mutex};
 
-use tokio::time::{
-    sleep,
-    Duration,
-};
+use tokio::time::{sleep, Duration};
 
 type WsWriter = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 type WsReader = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
@@ -106,9 +86,7 @@ impl ObserverExt for ObserverImpl {
             writer
                 .lock()
                 .await
-                .send(Message::Text(
-                    Payload::from(candidate).to_string().unwrap(),
-                ))
+                .send(Message::Text(Payload::from(candidate).to_string().unwrap()))
                 .await
                 .unwrap();
         });
@@ -117,7 +95,9 @@ impl ObserverExt for ObserverImpl {
     fn on_data_channel(&mut self, channel: RTCDataChannel) {
         let channels = self.channels.clone();
         tokio::spawn(async move {
-            channel.register_sink(0, Sinker::new(ChannelSinkImpl {})).await;
+            channel
+                .register_sink(0, Sinker::new(ChannelSinkImpl {}))
+                .await;
             channels.lock().await.push(channel);
         });
     }
@@ -128,12 +108,12 @@ impl ObserverExt for ObserverImpl {
             match &mut track {
                 MediaStreamTrack::Video(track) => {
                     track.register_sink(0, VideoSinkImpl::new()).await;
-                },
+                }
                 MediaStreamTrack::Audio(track) => {
                     track.register_sink(0, Sinker::new(AudioSinkImpl {})).await;
-                },
+                }
             }
-    
+
             tracks.lock().await.push(track);
         });
     }
@@ -172,10 +152,7 @@ async fn read_ws_message(
 
 // get video frame for video input file,
 // and put frame to rtc video track.
-async fn read_frame(
-    mut fs: fs::File,
-    track: MediaStreamTrack,
-) -> anyhow::Result<()> {
+async fn read_frame(mut fs: fs::File, track: MediaStreamTrack) -> anyhow::Result<()> {
     if let MediaStreamTrack::Video(track) = track {
         let need_size = (1920.0 * 1080.0 * 1.5) as usize;
         let mut buf = vec![0u8; need_size];
@@ -185,11 +162,11 @@ async fn read_frame(
             match fs.read_exact(&mut buf).await {
                 Err(_) => {
                     fs.seek(SeekFrom::Start(0)).await?;
-                },
+                }
                 Ok(size) => {
                     let frame = VideoFrame::new(1920, 1080, &buf[..size]);
                     track.add_frame(&frame);
-                },
+                }
             }
         }
     }
